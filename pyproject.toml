@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "self-healing-rpa"
+version = "3.0.0"
+description = "Framework Multi-RPA Self-Healing com Playwright e IA"
+requires-python = ">=3.11"
+dependencies = [
+    "playwright>=1.44.0",
+    "openai>=1.30.0",
+    "anthropic>=0.25.0",
+    "gitpython>=3.1.43",
+    "loguru>=0.7.2",
+    "python-dotenv>=1.0.1",
+    "rich>=13.7.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.7",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+rpa-cli = "cli:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["rpa_self_healing", "bots"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# UV / virtualenv
+.venv/
+venv/
+env/
+
+# Secrets — nunca versionar
+.env
+
+# Logs e evidências
+logs/
+*.jsonl
+*.json.bak
+
+# Playwright
+.playwright/
+playwright-report/
+test-results/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cache do framework
+rpa_self_healing/infrastructure/cache/repair_cache.json
