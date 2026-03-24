@@ -67,7 +67,7 @@ self_healing_rpa/
 │   ├── registry.py             # Auto-discovery
 │   ├── _template/              # Template para novos bots
 │   └── expandtesting/          # Bot de demo
-├── tests/                      # 38 testes unitarios
+├── tests/                      # 48 testes unitarios
 └── docs/                       # Skills + super prompt
 ```
 
@@ -182,8 +182,9 @@ PLAYWRIGHT_TIMEOUT=10000
 
 ## Documentacao Completa
 
+- **Manual do Framework**: `docs/manual.md` — Guia completo para iniciantes
 - **Super Prompt**: `docs/instrucoes.md` — Recria o projeto do zero
-- **Skills (regras obrigatorias)**: `docs/skills/*.md` — 9 arquivos de referencia
+- **Skills (regras obrigatorias)**: `docs/skills/*.md` — 10 arquivos de referencia
 - **Memoria de IA**: As skills sao lidas pela IA antes de qualquer modificacao
 
 ## Stack
