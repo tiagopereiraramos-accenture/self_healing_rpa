@@ -53,7 +53,7 @@ class GitService:
             f"LLM utilizado:    {llm_model}\n"
             f"Tokens usados:    {tokens_in} input + {tokens_out} output\n"
             f"Confiança:        {confidence:.2f}\n\n"
-            f"Correção automática — Framework Self-Healing RPA v3.0"
+            f"Correção automática — Framework Self-Healing RPA v3.1"
         )
         try:
             self._repo.index.add([str(selectors_file.resolve())])
