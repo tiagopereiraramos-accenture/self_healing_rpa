@@ -12,6 +12,7 @@ Framework Python para Automacao de Processos Roboticos (RPA) com self-healing em
 - **Multi-provider LLM**: OpenRouter -> Anthropic -> Ollama (fallback offline)
 - **Clean Architecture**: Domain / Application / Infrastructure / Bots
 - **Observabilidade**: Metricas de custo, tokens, taxa de sucesso, cache hits
+- **Zero Boilerplate (v3.2)**: `@use_case`, `OK()`, `FAIL()`, `@bot`, `scaffold`
 
 ## Quick Start
 
@@ -36,6 +37,76 @@ uv run rpa-cli --list
 uv run rpa-cli expandtesting demo-healing --nivel locator
 ```
 
+## Criar um Bot em 30 segundos (v3.2)
+
+```bash
+# Gerar estrutura completa
+uv run rpa-cli scaffold meu_bot --url https://sistema.com --actions login,coleta,download
+```
+
+Isso gera automaticamente:
+
+```
+bots/meu_bot/
+  __init__.py        — @bot decorator (auto-discovery)
+  selectors.py       — seletores CSS
+  use_cases/
+    login_uc.py      — @use_case("meu_bot", "login")
+    coleta_uc.py     — @use_case("meu_bot", "coleta")
+    download_uc.py   — @use_case("meu_bot", "download")
+```
+
+Cada use case gerado usa o estilo zero boilerplate:
+
+```python
+from rpa_self_healing import use_case, OK
+import bots.meu_bot.selectors as sel
+
+@use_case("meu_bot", "login")
+async def login(driver, username="", password="", **kwargs):
+    await driver.goto("https://sistema.com")
+    await driver.fill("CAMPO_USERNAME", sel.CAMPO_PRINCIPAL, username)
+    await driver.click("BOTAO_LOGIN", sel.BOTAO_CONFIRMAR)
+    return OK(url=driver.page.url)
+```
+
+Sem classes, sem TransactionTracker, sem imports de ActionStatus. O framework cuida de tudo.
+
+## v3.2 vs v3.1 — Comparacao
+
+### Antes (v3.1) — 20 linhas
+```python
+from rpa_self_healing.domain.entities import ActionStatus
+from rpa_self_healing.infrastructure.driver.playwright_driver import PlaywrightDriver
+from rpa_self_healing.infrastructure.logging.rpa_logger import TransactionTracker
+import bots.meu_bot.selectors as sel
+
+class LoginUC:
+    def __init__(self, driver: PlaywrightDriver) -> None:
+        self._driver = driver
+
+    async def execute(self, username="", **kwargs) -> dict:
+        with TransactionTracker(bot_name="meu_bot", action="login", item_id=username) as tracker:
+            await self._driver.goto("https://...")
+            await self._driver.fill("CAMPO", sel.CAMPO, username)
+            tracker.add_healing_stats(self._driver.get_healing_stats())
+            return {"status": ActionStatus.SUCESSO, "url": self._driver.page.url}
+```
+
+### Depois (v3.2) — 8 linhas
+```python
+from rpa_self_healing import use_case, OK
+import bots.meu_bot.selectors as sel
+
+@use_case("meu_bot", "login")
+async def login(driver, username="", **kwargs):
+    await driver.goto("https://...")
+    await driver.fill("CAMPO", sel.CAMPO, username)
+    return OK(url=driver.page.url)
+```
+
+**Ambos os estilos funcionam.** O v3.1 classico continua 100% compativel.
+
 ## Arquitetura
 
 ```
@@ -56,35 +127,37 @@ PlaywrightDriver
 ```
 self_healing_rpa/
 ├── pyproject.toml              # UV + hatchling
-├── cli.py                      # Entry point (rpa-cli)
+├── cli.py                      # Entry point (rpa-cli) + scaffold
 ├── rpa_self_healing/           # Motor central
 │   ├── config.py               # Settings (.env)
+│   ├── shortcuts.py            # OK(), FAIL(), @use_case (v3.2)
 │   ├── domain/                 # Entidades + interfaces (zero deps)
-│   ├── application/            # LocatorHealer, FlowHealer, HealingOrchestrator
+│   ├── application/            # LocatorHealer, FlowHealer, HealingOrchestrator, Pipeline
 │   └── infrastructure/         # Driver, LLM, Cache, Git, Logging
 ├── bots/                       # Bots independentes
-│   ├── base.py                 # BaseBot + @action decorator
+│   ├── base.py                 # BaseBot + @action + @bot decorator
 │   ├── registry.py             # Auto-discovery
-│   ├── _template/              # Template para novos bots
 │   └── expandtesting/          # Bot de demo
-├── tests/                      # 48 testes unitarios
-└── docs/                       # Skills + super prompt
+├── tests/                      # 66 testes unitarios
+└── docs/                       # Manual + Skills + super prompt
 ```
 
-## Pipeline (v3.1)
+## Pipeline (v3.1+)
 
 Encadeie use cases em sequencia com branching condicional:
 
 ```python
 from rpa_self_healing.application.pipeline import Pipeline
 
-result = await Pipeline(self._driver, bot_name="meu_bot") \
-    .step("login", LoginUC) \
-    .step("coleta", ColetarDadosUC, when=lambda r: r.get("role") == "admin") \
-    .step("download", BaixarArquivoUC, forward=["token"]) \
+result = await Pipeline(driver, bot_name="meu_bot") \
+    .step("login", login) \
+    .step("coleta", coletar, when=lambda r: r.get("role") == "admin") \
+    .step("download", baixar, forward=["token"]) \
     .on_error(notificar_erro) \
     .run(username="user")
 ```
+
+Funciona com `@use_case` (v3.2) e com classes (v3.1).
 
 ```bash
 # Demo do pipeline
@@ -102,6 +175,9 @@ uv run rpa-cli expandtesting demo-healing --nivel locator
 uv run rpa-cli expandtesting demo-healing --nivel flow
 uv run rpa-cli expandtesting demo-healing --nivel ambos
 
+# Scaffold (v3.2)
+uv run rpa-cli scaffold meu_bot --url https://sistema.com --actions login,coleta
+
 # Observabilidade
 uv run rpa-cli --healing-stats
 uv run rpa-cli --cache-stats
@@ -111,54 +187,18 @@ uv run rpa-cli --cache-clear
 uv run rpa-cli expandtesting demo-healing --headless false
 ```
 
-## Criar um Novo Bot
-
-```bash
-# 1. Copiar template
-cp -r bots/_template/ bots/meu_bot/
-```
+## Helpers Rapidos (v3.2)
 
 ```python
-# 2. bots/meu_bot/__init__.py
-from bots.base import BaseBot, action
+from rpa_self_healing import OK, FAIL, use_case
 
-class MeuBot(BaseBot):
-    name = "meu_bot"
-    description = "Descricao do bot"
-    url = "https://sistema.com"
+# Sucesso
+return OK(url="https://...", token="abc")
+# => {"status": "sucesso", "url": "https://...", "token": "abc"}
 
-    @action("minha-action")
-    async def _minha_action(self, **kwargs) -> dict:
-        from bots.meu_bot.use_cases.minha_action_uc import MinhaActionUC
-        return await MinhaActionUC(self._driver).execute(**kwargs)
-
-BOT_CLASS = MeuBot  # Obrigatorio para auto-discovery
-```
-
-```python
-# 3. bots/meu_bot/selectors.py
-CAMPO_PRINCIPAL: str = "[name='campo']"
-BOTAO_CONFIRMAR: str = "button:has-text('Confirmar')"
-```
-
-```python
-# 4. bots/meu_bot/use_cases/minha_action_uc.py
-from rpa_self_healing.domain.entities import ActionStatus
-from rpa_self_healing.infrastructure.driver.playwright_driver import PlaywrightDriver
-from rpa_self_healing.infrastructure.logging.rpa_logger import TransactionTracker
-import bots.meu_bot.selectors as sel
-
-class MinhaActionUC:
-    def __init__(self, driver: PlaywrightDriver) -> None:
-        self._driver = driver
-
-    async def execute(self, **kwargs) -> dict:
-        with TransactionTracker(bot_name="meu_bot", action="minha-action") as tracker:
-            await self._driver.goto("https://sistema.com")
-            await self._driver.fill("CAMPO_PRINCIPAL", sel.CAMPO_PRINCIPAL, "valor")
-            await self._driver.click("BOTAO_CONFIRMAR", sel.BOTAO_CONFIRMAR)
-            tracker.add_healing_stats(self._driver.get_healing_stats())
-            return {"status": ActionStatus.SUCESSO}
+# Erro logico
+return FAIL("Credenciais invalidas", tentativas=3)
+# => {"status": "erro_logico", "msg": "Credenciais invalidas", "tentativas": 3}
 ```
 
 ## Configuracao (.env)
@@ -197,4 +237,4 @@ PLAYWRIGHT_TIMEOUT=10000
 
 ## Licenca
 
-Criado por Tiago Pereira Ramos — Self-Healing RPA v3.1
+Criado por Tiago Pereira Ramos — Self-Healing RPA v3.2

@@ -16,3 +16,4 @@ class TemplateBot(BaseBot):
 
 
 # BOT_CLASS omitido intencionalmente — template nao aparece no CLI
+# Para novos bots, prefira: uv run rpa-cli scaffold meu_bot --url https://... --actions login,coleta
