@@ -71,6 +71,26 @@ self_healing_rpa/
 └── docs/                       # Skills + super prompt
 ```
 
+## Pipeline (v3.1)
+
+Encadeie use cases em sequencia com branching condicional:
+
+```python
+from rpa_self_healing.application.pipeline import Pipeline
+
+result = await Pipeline(self._driver, bot_name="meu_bot") \
+    .step("login", LoginUC) \
+    .step("coleta", ColetarDadosUC, when=lambda r: r.get("role") == "admin") \
+    .step("download", BaixarArquivoUC, forward=["token"]) \
+    .on_error(notificar_erro) \
+    .run(username="user")
+```
+
+```bash
+# Demo do pipeline
+uv run rpa-cli expandtesting flow-completo
+```
+
 ## CLI
 
 ```bash
@@ -176,4 +196,4 @@ PLAYWRIGHT_TIMEOUT=10000
 
 ## Licenca
 
-Criado por Tiago Pereira Ramos — Self-Healing RPA v3.0
+Criado por Tiago Pereira Ramos — Self-Healing RPA v3.1

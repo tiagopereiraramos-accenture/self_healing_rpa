@@ -28,5 +28,11 @@ class ExpandTestingBot(BaseBot):
 
         return await DemoHealingUC(self._driver).execute(**kwargs)
 
+    @action("flow-completo")
+    async def _flow_completo(self, **kwargs) -> dict:
+        from bots.expandtesting.use_cases.flow_completo_uc import FlowCompletoUC
+
+        return await FlowCompletoUC(self._driver).execute(**kwargs)
+
 
 BOT_CLASS = ExpandTestingBot
