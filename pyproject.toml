@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "self-healing-rpa"
-version = "3.1.0"
+version = "3.2.0"
 description = "Framework Multi-RPA Self-Healing com Playwright e IA"
 requires-python = ">=3.11"
 dependencies = [

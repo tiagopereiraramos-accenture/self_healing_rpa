@@ -173,11 +173,79 @@ async def _run_bot_action(bot_id: str, action_name: str, kwargs: dict[str, Any])
     console.print(_json.dumps(result, indent=2, ensure_ascii=False, default=str))
 
 
+def _scaffold_bot(bot_name: str, kwargs: dict[str, Any]) -> None:
+    """Gera a estrutura completa de um novo bot."""
+    from rich.console import Console
+
+    console = Console()
+    url = kwargs.get("url", "https://example.com")
+    actions_str = kwargs.get("actions", "exemplo")
+    action_list = [a.strip() for a in str(actions_str).split(",") if a.strip()]
+
+    bots_dir = Path("bots") / bot_name
+    if bots_dir.exists():
+        console.print(f"[red]Pasta bots/{bot_name}/ ja existe.[/]")
+        sys.exit(1)
+
+    uc_dir = bots_dir / "use_cases"
+    uc_dir.mkdir(parents=True, exist_ok=True)
+    (uc_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # selectors.py
+    (bots_dir / "selectors.py").write_text(
+        f"# Seletores do Bot: {bot_name}\n"
+        f"# Adicione seus seletores CSS aqui\n\n"
+        f'CAMPO_PRINCIPAL: str = "[name=\'campo\']"\n'
+        f"BOTAO_CONFIRMAR: str = \"button:has-text('Confirmar')\"\n",
+        encoding="utf-8",
+    )
+
+    # use cases
+    for action_name in action_list:
+        fn_name = action_name.replace("-", "_")
+        uc_file = uc_dir / f"{fn_name}_uc.py"
+        uc_file.write_text(
+            f"from __future__ import annotations\n\n"
+            f"from rpa_self_healing import use_case, OK\n"
+            f"import bots.{bot_name}.selectors as sel\n\n\n"
+            f'@use_case("{bot_name}", "{action_name}")\n'
+            f"async def {fn_name}(driver, **kwargs):\n"
+            f'    await driver.goto("{url}")\n'
+            f'    return OK(msg="{action_name} executado")\n',
+            encoding="utf-8",
+        )
+
+    # __init__.py
+    class_name = "".join(w.capitalize() for w in bot_name.split("_")) + "Bot"
+    (bots_dir / "__init__.py").write_text(
+        f"from __future__ import annotations\n\n"
+        f"from bots.base import bot\n\n\n"
+        f'@bot(name="{bot_name}", description="Bot {bot_name}", url="{url}")\n'
+        f"class {class_name}:\n"
+        f"    pass  # actions auto-descobertas de use_cases/\n",
+        encoding="utf-8",
+    )
+
+    console.print(f"\n[green]Bot '{bot_name}' criado com sucesso![/]\n")
+    console.print(f"  [dim]bots/{bot_name}/[/]")
+    console.print(f"  [dim]  __init__.py[/]        — {class_name} com @bot decorator")
+    console.print(f"  [dim]  selectors.py[/]       — seletores CSS")
+    console.print(f"  [dim]  use_cases/[/]")
+    for action_name in action_list:
+        fn_name = action_name.replace("-", "_")
+        console.print(f"  [dim]    {fn_name}_uc.py[/]  — @use_case(\"{action_name}\")")
+    console.print(f"\n[cyan]Para testar:[/] uv run rpa-cli {bot_name} {action_list[0]}\n")
+
+
 def main() -> None:
     args = sys.argv[1:]
 
     if not args or args[0] in ("-h", "--help"):
-        print("Uso: rpa-cli [--list | --healing-stats | --cache-stats | --cache-clear | <bot> [<action> [--param val ...]]]")
+        print(
+            "Uso: rpa-cli [--list | --healing-stats | --cache-stats | --cache-clear\n"
+            "             | scaffold <bot> [--url URL] [--actions a,b,c]\n"
+            "             | <bot> [<action> [--param val ...]]]"
+        )
         sys.exit(0)
 
     # Global flags
@@ -200,6 +268,16 @@ def main() -> None:
         bot_filter = kwargs.get("bot")
         RepairCache().clear(bot_name=bot_filter if isinstance(bot_filter, str) else None)
         print(f"Cache limpo{f' para bot={bot_filter}' if bot_filter else ''}.")
+        return
+
+    # Scaffold command
+    if args[0] == "scaffold":
+        if len(args) < 2:
+            print("Uso: rpa-cli scaffold <nome_do_bot> [--url URL] [--actions login,coleta]")
+            sys.exit(1)
+        bot_name = args[1]
+        kwargs = _parse_kwargs(args[2:])
+        _scaffold_bot(bot_name, kwargs)
         return
 
     # Bot routing
