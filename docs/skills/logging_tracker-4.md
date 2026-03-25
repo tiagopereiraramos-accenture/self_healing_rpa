@@ -216,7 +216,35 @@ O decorator:
 - Adiciona `healing_stats` automaticamente se `self._driver` existir
 - Funciona apenas com metodos `async` de classes que possuem `self._driver`
 
-## 6. Estrutura JSONL de Healing Event
+## 6. Decorator @use_case (v3.2 -- Recomendado)
+
+O decorator `@use_case` de `rpa_self_healing/shortcuts.py` e a forma mais simples
+de criar um use case com tracking automatico:
+
+```python
+from rpa_self_healing import use_case, OK, FAIL
+
+@use_case("meu_bot", "minha-action")
+async def minha_action(driver, **kwargs):
+    # tracker e injetado automaticamente como kwarg
+    tracker = kwargs.get("tracker")
+    tracker.item_id = kwargs.get("usuario", "")
+
+    await driver.goto("https://...")
+    return OK(url=driver.page.url)
+```
+
+Diferenca entre `@tracked`, `@use_case` e `TransactionTracker` manual:
+
+| Feature | TransactionTracker | @tracked | @use_case |
+|---------|-------------------|----------|-----------|
+| Requer classe | Sim | Sim | Nao |
+| Healing stats automatico | Manual | Automatico | Automatico |
+| Tracker disponivel | Sim | Via kwarg | Via kwarg |
+| Compativel com Pipeline | Sim | Sim | Sim |
+| Estilo recomendado | v3.0 | v3.0 | v3.2 |
+
+## 7. Estrutura JSONL de Healing Event
 
 Gerado pelo `HealingOrchestrator` via `log_healing_event(event.__dict__)`:
 

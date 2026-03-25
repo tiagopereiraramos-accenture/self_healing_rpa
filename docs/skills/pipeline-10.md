@@ -39,7 +39,7 @@ Adiciona um step ao pipeline.
 | Parametro | Tipo | Descricao |
 |-----------|------|-----------|
 | `name` | `str` | Nome do step (aparece em logs e metricas) |
-| `uc_class` | `type` | Classe UC com `__init__(driver)` e `execute(**kwargs)` |
+| `uc_class` | `type` ou `Callable` | Classe UC com `__init__(driver)` e `execute(**kwargs)`, ou funcao decorada com `@use_case` |
 | `when` | `Callable` | Condicao: recebe resultado do step anterior, retorna `bool` |
 | `forward` | `list[str]` | Chaves do resultado a injetar como kwargs nos steps seguintes |
 
@@ -161,3 +161,24 @@ uv run rpa-cli expandtesting flow-completo --username practice --password SuperS
 - NUNCA colocar logica de negocio dentro do Pipeline — ele e apenas orquestrador
 - Use cases dentro do pipeline podem ter seus proprios `TransactionTracker` internos
 - O self-healing funciona normalmente dentro de cada step
+
+## 10. Compatibilidade com @use_case (v3.2)
+
+O Pipeline aceita tanto classes quanto funcoes decoradas com @use_case:
+
+```python
+from rpa_self_healing import use_case, OK
+
+@use_case("meu_bot", "step-a")
+async def step_a(driver, **kwargs):
+    return OK(valor=42)
+
+@use_case("meu_bot", "step-b")
+async def step_b(driver, valor=0, **kwargs):
+    return OK(dobro=valor * 2)
+
+result = await Pipeline(driver, bot_name="meu_bot") \
+    .step("a", step_a, forward=["valor"]) \
+    .step("b", step_b) \
+    .run()
+```

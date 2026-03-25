@@ -1,6 +1,6 @@
 # Manual do Desenvolvedor — Self-Healing RPA Framework
 
-**Versao 3.1** | Criado por Tiago Pereira Ramos
+**Versao 3.2** | Criado por Tiago Pereira Ramos
 
 Este manual explica, passo a passo, tudo que voce precisa saber para usar o
 framework. Mesmo que voce nunca tenha trabalhado com RPA, Playwright ou IA,
@@ -109,6 +109,9 @@ abrir arquivos Python para executar um bot.
 ### Comandos basicos
 
 ```bash
+# Gerar estrutura de um novo bot
+uv run rpa-cli scaffold meu_bot --url https://sistema.com --actions login,coleta
+
 # Listar todos os bots registrados e suas acoes
 uv run rpa-cli --list
 
@@ -178,6 +181,7 @@ self_healing_rpa/
 │
 ├── rpa_self_healing/              # Motor do framework — voce NAO mexe aqui
 │   ├── config.py                  # Le o .env
+│   ├── shortcuts.py               # OK(), FAIL(), @use_case — atalhos v3.2
 │   ├── domain/                    # Tipos e contratos
 │   ├── application/               # Logica de healing e pipeline
 │   └── infrastructure/            # Playwright, LLM, Cache, Git, Logging
@@ -194,6 +198,30 @@ framework e voce nao precisa modificar.
 ---
 
 ## 5. Criando seu primeiro bot
+
+### Modo Rapido com scaffold (v3.2 — recomendado)
+
+A partir da v3.2, voce pode gerar toda a estrutura de um bot com um unico
+comando:
+
+```bash
+uv run rpa-cli scaffold meu_bot --url https://sistema-x.com.br --actions login,baixar-relatorio
+```
+
+Isso cria automaticamente:
+
+- `bots/meu_bot/__init__.py` com registro do bot
+- `bots/meu_bot/selectors.py` com seletores em branco
+- `bots/meu_bot/use_cases/login_uc.py` e `baixar_relatorio_uc.py` prontos para editar
+
+Voce so precisa preencher os seletores e a logica de cada use case. Todo o
+boilerplate ja vem pronto.
+
+---
+
+### Estilo Classico (v3.1)
+
+Se preferir criar manualmente, siga os passos abaixo.
 
 ### Passo 1: Copie o template
 
@@ -253,6 +281,22 @@ BOT_CLASS = MeuBot
 **Sobre o `@action`**: o nome que voce passa entre aspas e o nome usado no CLI.
 Se voce nao passar nome, ele usa o nome do metodo (sem `_` inicial, trocando `_`
 por `-`). Exemplo: `_baixar_relatorio` vira `baixar-relatorio`.
+
+#### Alternativa com `@bot` (v3.2)
+
+Na v3.2, voce pode usar o decorator `@bot` que simplifica o registro e faz
+auto-discovery dos use cases na pasta `use_cases/`:
+
+```python
+from bots.base import bot
+
+@bot(name="meu_bot", description="Meu primeiro bot", url="https://sistema-x.com.br")
+class MeuBot:
+    pass  # actions auto-descobertas de use_cases/
+```
+
+Nao precisa de `@action`, `BOT_CLASS`, nem imports de use cases — o decorator
+`@bot` cuida de tudo automaticamente.
 
 ### Passo 3: Defina os seletores
 
@@ -415,7 +459,36 @@ Se o site mudar e seu seletor parar de funcionar, o framework:
 Cada acao do bot e um "use case" — um arquivo Python com uma classe que faz uma
 coisa especifica.
 
-### Estrutura obrigatoria
+### Estilo Zero Boilerplate (v3.2 — recomendado)
+
+Na v3.2, voce pode usar o decorator `@use_case` com `OK()` e `FAIL()` para
+escrever use cases sem classes, sem `TransactionTracker` e sem imports de
+`ActionStatus`:
+
+```python
+from rpa_self_healing import use_case, OK, FAIL
+import bots.meu_bot.selectors as sel
+
+@use_case("meu_bot", "login")
+async def login(driver, usuario="", senha="", **kwargs):
+    await driver.goto("https://sistema-x.com.br/login")
+    await driver.fill("CAMPO_USUARIO", sel.CAMPO_USUARIO, usuario)
+    await driver.fill("CAMPO_SENHA", sel.CAMPO_SENHA, senha)
+    await driver.click("BOTAO_ENTRAR", sel.BOTAO_ENTRAR)
+
+    if await driver.is_visible(sel.MSG_ERRO):
+        msg = await driver.get_text("MSG_ERRO", sel.MSG_ERRO)
+        return FAIL(msg)
+
+    return OK(url=driver.page.url)
+```
+
+Sem classes, sem `TransactionTracker`, sem imports de `ActionStatus`. O decorator
+`@use_case` cuida de tudo automaticamente.
+
+---
+
+### Estilo Classico (v3.1)
 
 ```python
 from __future__ import annotations
@@ -554,6 +627,9 @@ if broken:
 O Pipeline permite encadear varias acoes em sequencia, como uma "receita".
 Se um passo falha, voce pode notificar, pular, ou parar.
 
+O Pipeline funciona tanto com classes (estilo v3.1) quanto com funcoes decoradas
+com `@use_case` (estilo v3.2). Basta passar a classe ou a funcao como step.
+
 ### Exemplo simples
 
 ```python
@@ -649,6 +725,9 @@ uv run rpa-cli expandtesting flow-completo
 ## 10. Logging e rastreamento
 
 Todo use case deve usar o `TransactionTracker`. Ele gera logs automaticos.
+
+> **v3.2**: se voce usa o decorator `@use_case`, o `TransactionTracker` e
+> criado e gerenciado automaticamente. Voce nao precisa instancia-lo.
 
 ### Arquivos de log
 
@@ -792,8 +871,8 @@ uv run pytest tests/unit/test_pipeline.py::test_pipeline_all_steps_succeed -v
 
 Os testes usam mocks — nao abrem navegador nem chamam IA. Sao rapidos e seguros.
 
-Atualmente: **48 testes unitarios** cobrindo cache, healers, orchestrator,
-pipeline, selector repository, config e LLM router.
+Atualmente: **66 testes unitarios** cobrindo cache, healers, orchestrator,
+pipeline, selector repository, config, LLM router, shortcuts e scaffold.
 
 ---
 
@@ -842,6 +921,12 @@ pipeline.on_error(notificar, stop=False)
 result = await pipeline.run(itens=lista_de_itens)
 ```
 
+### "Qual estilo devo usar, v3.1 ou v3.2?"
+
+Use v3.2 (`@use_case` + `OK`/`FAIL`) para novos bots. E mais simples e tem
+menos boilerplate. O estilo v3.1 (classes + `TransactionTracker`) continua
+funcionando para bots existentes.
+
 ### "Como vejo o que a IA fez?"
 
 Olhe os arquivos em `logs/`:
@@ -871,4 +956,9 @@ Olhe os arquivos em `logs/`:
 | **UV** | Gerenciador de pacotes Python moderno (substitui pip) |
 | **Playwright** | Biblioteca para controlar navegadores web |
 | **OpenRouter** | Gateway de APIs de IA (acesso a varios modelos) |
+| **@use_case** | Decorator v3.2 que transforma uma funcao em use case com TransactionTracker automatico |
+| **OK()** | Funcao v3.2 que retorna resultado de sucesso (substitui `ActionStatus.SUCESSO`) |
+| **FAIL()** | Funcao v3.2 que retorna resultado de erro logico (substitui `ActionStatus.ERRO_LOGICO`) |
+| **@bot** | Decorator v3.2 que registra um bot com auto-discovery de use cases |
+| **scaffold** | Comando CLI que gera a estrutura completa de um novo bot automaticamente |
 | **MAPE-K** | Monitor, Analyze, Plan, Execute, Knowledge — ciclo de self-healing |

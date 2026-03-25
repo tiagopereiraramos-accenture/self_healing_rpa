@@ -27,7 +27,8 @@ bots/
         ├── __init__.py
         ├── login_uc.py
         ├── login_invalido_uc.py
-        └── demo_healing_uc.py
+        ├── demo_healing_uc.py
+        └── flow_completo_uc.py
 ```
 
 Para criar um novo bot: `cp -r bots/_template/ bots/nome_do_bot/`
@@ -231,7 +232,54 @@ ActionStatus.ERRO_LOGICO    # "erro_logico" -- erro de negocio (credenciais, val
 ActionStatus.ERRO_TECNICO   # "erro_tecnico" -- excecao nao tratada
 ```
 
-## 8. Regras Inviolaveis
+## 9. Estilo v3.2 — @use_case + @bot
+
+### Use case com @use_case
+
+```python
+from rpa_self_healing import use_case, OK, FAIL
+import bots.meu_bot.selectors as sel
+
+@use_case("meu_bot", "login")
+async def login(driver, username="", password="", **kwargs):
+    await driver.goto("https://sistema.com")
+    await driver.fill("CAMPO_USERNAME", sel.CAMPO_USERNAME, username)
+    await driver.click("BOTAO_LOGIN", sel.BOTAO_LOGIN)
+    return OK(url=driver.page.url)
+```
+
+### Bot com @bot (auto-discovery)
+
+```python
+from bots.base import bot
+
+@bot(name="meu_bot", description="Meu bot", url="https://sistema.com")
+class MeuBot:
+    pass  # actions auto-descobertas de use_cases/
+```
+
+O decorator `@bot`:
+- Herda `BaseBot` automaticamente
+- Auto-descobre use cases decorados com `@use_case` na pasta `use_cases/`
+- Define `BOT_CLASS` automaticamente no modulo
+
+### Geracao com scaffold
+
+```bash
+uv run rpa-cli scaffold meu_bot --url https://sistema.com --actions login,coleta
+```
+
+### Helpers OK / FAIL
+
+```python
+return OK(url="...", token="abc")
+# => {"status": ActionStatus.SUCESSO, "url": "...", "token": "abc"}
+
+return FAIL("credenciais invalidas")
+# => {"status": ActionStatus.ERRO_LOGICO, "msg": "credenciais invalidas"}
+```
+
+## 10. Regras Inviolaveis
 
 1. **NUNCA modifique `cli.py` para adicionar novas actions** -- basta usar `@action` + `BOT_CLASS`
 2. **Imports lazy** dentro de metodos `@action` para evitar imports circulares
@@ -239,3 +287,4 @@ ActionStatus.ERRO_TECNICO   # "erro_tecnico" -- excecao nao tratada
 4. **`TransactionTracker` obrigatorio** em todo use case
 5. **`tracker.fail(msg)` para erros logicos**, nao excecoes
 6. **`tracker.add_healing_stats()`** deve ser chamado antes do retorno bem-sucedido
+7. **Para novos bots, prefira `@use_case` + `@bot` (v3.2) em vez de classes**

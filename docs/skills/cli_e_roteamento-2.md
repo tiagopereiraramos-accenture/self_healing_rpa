@@ -20,6 +20,7 @@ rpa-cli = "cli:main"
 ```
 
 Execucao: `uv run rpa-cli <bot_id> <action> [--param value ...]`
+Scaffold: `uv run rpa-cli scaffold <bot_name> [--url URL] [--actions a,b,c]`
 
 ## 2. Parsing Dinamico -- `_parse_kwargs()`
 
@@ -180,3 +181,30 @@ Nao e necessario alterar `cli.py`. Basta:
 3. Retornar `dict` com resultado
 
 O CLI descobre e roteia automaticamente.
+
+## 11. Scaffold — Gerador de Bots
+
+O comando `scaffold` gera a estrutura completa de um novo bot no estilo v3.2:
+
+```bash
+uv run rpa-cli scaffold meu_bot --url https://site.com --actions login,coleta
+```
+
+### O que e gerado
+
+```
+bots/meu_bot/
+├── __init__.py          # @bot decorator com auto-discovery
+├── selectors.py         # Arquivo de seletores vazio
+└── use_cases/
+    ├── __init__.py
+    ├── login_uc.py      # @use_case com OK/FAIL
+    └── coleta_uc.py     # @use_case com OK/FAIL
+```
+
+### Estilo do codigo gerado
+
+O bot gerado usa o estilo v3.2:
+- `__init__.py` usa o decorator `@bot` para auto-discovery (herda `BaseBot` automaticamente e define `BOT_CLASS`)
+- Cada use case usa `@use_case` com retornos `OK()` / `FAIL()`
+- Actions sao auto-descobertas a partir da pasta `use_cases/`

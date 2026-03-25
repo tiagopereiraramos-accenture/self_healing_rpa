@@ -6,7 +6,7 @@ description: Boas praticas e convencoes obrigatorias para todo codigo no framewo
 # Skill 1 -- Boas Praticas e Convencoes
 
 Regras obrigatorias para qualquer desenvolvedor ou IA que trabalhe neste projeto.
-Baseado na implementacao real do framework Self-Healing RPA v3.0.
+Baseado na implementacao real do framework Self-Healing RPA v3.2.
 
 ---
 
@@ -26,7 +26,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "self-healing-rpa"
-version = "3.0.0"
+version = "3.2.0"
 requires-python = ">=3.11"
 ```
 
@@ -217,3 +217,18 @@ select = ["E", "F", "I", "UP"]
 - Todo codigo de automacao e `async`/`await`
 - NUNCA bloquear o event loop com operacoes sincronas pesadas
 - Usar `asyncio.sleep()`, nunca `time.sleep()` em codigo async
+
+## 14. Atalhos v3.2 -- OK / FAIL / @use_case
+
+A partir da v3.2, use cases podem ser criados com decorators em vez de classes:
+
+```python
+from rpa_self_healing import use_case, OK, FAIL
+
+@use_case("meu_bot", "minha-action")
+async def minha_action(driver, **kwargs):
+    return OK(msg="done")
+    # ou: return FAIL("erro logico")
+```
+
+Ambos os estilos (v3.1 classes e v3.2 decorators) sao validos. Para novos bots, prefira v3.2.

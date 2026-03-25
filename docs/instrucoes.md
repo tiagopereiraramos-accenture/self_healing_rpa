@@ -1,6 +1,6 @@
 # Super Prompt: Self-Healing RPA — Framework Multi-RPA Self-Healing com Playwright e IA
 
-**Versao 3.0 — Atualizado em 24 de Marco de 2026**
+**Versao 3.2 — Atualizado em 24 de Marco de 2026**
 Criado por Tiago Pereira Ramos — Baseado em pesquisa aplicada de Self-Healing Automation 2025/2026
 
 ---
@@ -13,7 +13,7 @@ Self-Healing RPA e um framework Python para Automacao de Processos Roboticos (RP
 - **Self-Healing em dois niveis** — Locator Healing (seletor quebrou) + Flow Healing (logica quebrou) com LLM multi-provider
 - **Deteccao Proativa** — detecta iminencia de falha antes de ocorrer, via DOM monitoring
 - **Cache Persistente de Reparos** — reparos sao reutilizados sem custo de inferencia
-- **CLI unificado (rpa-cli)** — auto-discovery de bots e acoes via `@action` decorator
+- **CLI unificado (rpa-cli)** — auto-discovery de bots e acoes via `@action`/`@use_case` decorators + comando `scaffold`
 - **Clean Architecture rigorosa** — Domain / Application / Infrastructure / Bots
 - **Page Object Model** — seletores isolados em `selectors.py` por bot
 - **UV + pyproject.toml** — zero pip, zero requirements.txt
@@ -69,7 +69,7 @@ docs/skills/
 | Logging     | `with TransactionTracker(...)`             | `print()`                                   |
 | CLI         | Receber `**kwargs` nos bots                | Modificar `cli.py`                          |
 | Git         | Nunca alterar SelectorRepository           | Trocar regex por AST                        |
-| Bots        | `BOT_CLASS = MinhaClasse` + `@action`      | Seletores hardcodados                       |
+| Bots        | `@bot` decorator ou `BOT_CLASS` + `@action`/`@use_case` | Seletores hardcodados                       |
 | LLM         | Usar `LLMRouter` centralizado              | Instanciar cliente LLM direto no bot        |
 | Cache       | Consultar `RepairCache` antes de healing   | Chamar LLM sem checar cache                 |
 | Healing     | Nivel 1 (locator) antes de Nivel 2 (flow)  | Pular para flow sem tentar locator          |
@@ -139,8 +139,9 @@ self_healing_rpa/
 ├── cli.py                        # Entry point do rpa-cli (NUNCA modificar para acoes)
 │
 ├── rpa_self_healing/             # Motor central (NUNCA logica de bot aqui)
-│   ├── __init__.py               # from rpa_self_healing.config import settings
+│   ├── __init__.py               # settings, OK, FAIL, use_case
 │   ├── config.py                 # Settings (instancia attrs no __init__)
+│   ├── shortcuts.py              # OK(), FAIL(), @use_case decorator
 │   │
 │   ├── domain/
 │   │   ├── __init__.py
@@ -179,15 +180,15 @@ self_healing_rpa/
 │           └── rpa_logger.py          # Loguru config + TransactionTracker + @tracked
 │
 ├── bots/
-│   ├── base.py                   # BaseBot + @action decorator + get_actions()
+│   ├── base.py                   # BaseBot + @action + @bot decorator + get_actions()
 │   ├── registry.py               # Auto-discovery de bots (importlib)
 │   │
-│   ├── _template/                # Template para novos bots (BOT_CLASS omitido)
+│   ├── _template/                # Template para novos bots (usa @bot + @use_case)
 │   │   ├── __init__.py
 │   │   ├── selectors.py
 │   │   └── use_cases/
 │   │       ├── __init__.py
-│   │       └── exemplo_uc.py
+│   │       └── exemplo_uc.py     # @use_case style (v3.2)
 │   │
 │   ├── expandtesting/            # Bot de DEMO (Self-Healing showcase)
 │   │   ├── __init__.py           # ExpandTestingBot com @action
@@ -240,7 +241,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "self-healing-rpa"
-version = "3.0.0"
+version = "3.2.0"
 description = "Framework Multi-RPA Self-Healing com Playwright e IA"
 requires-python = ">=3.11"
 dependencies = [
@@ -378,6 +379,59 @@ settings = Settings()
 ```
 
 **Decisao arquitetural**: Atributos de instancia no `__init__` (nao class-level) para permitir isolamento em testes via `monkeypatch.setattr("rpa_self_healing.config.settings", Settings())` sem `importlib.reload()`.
+
+### 7.3a rpa_self_healing/__init__.py
+
+```python
+from rpa_self_healing.config import settings
+from rpa_self_healing.shortcuts import FAIL, OK, use_case
+__all__ = ["settings", "OK", "FAIL", "use_case"]
+```
+
+### 7.3b rpa_self_healing/shortcuts.py
+
+```python
+from __future__ import annotations
+from functools import wraps
+from typing import Any
+from rpa_self_healing.domain.entities import ActionStatus
+
+def OK(**data: Any) -> dict[str, Any]:
+    return {"status": ActionStatus.SUCESSO, **data}
+
+def FAIL(msg: str, **data: Any) -> dict[str, Any]:
+    return {"status": ActionStatus.ERRO_LOGICO, "msg": msg, **data}
+
+def use_case(bot_name: str, action_name: str):
+    def decorator(fn):
+        @wraps(fn)
+        async def _execute(self, **kwargs):
+            from rpa_self_healing.infrastructure.logging.rpa_logger import TransactionTracker
+            with TransactionTracker(bot_name=bot_name, action=action_name) as tracker:
+                kwargs["tracker"] = tracker
+                result = await fn(self._driver, **kwargs)
+                if hasattr(self._driver, "get_healing_stats"):
+                    tracker.add_healing_stats(self._driver.get_healing_stats())
+                return result
+
+        class _UCWrapper:
+            __qualname__ = fn.__qualname__
+            __name__ = fn.__name__
+            __doc__ = fn.__doc__
+            def __init__(self, driver):
+                self._driver = driver
+            execute = _execute
+
+        _UCWrapper._is_use_case = True
+        _UCWrapper._bot_name = bot_name
+        _UCWrapper._action_name = action_name
+        _UCWrapper.__name__ = fn.__name__
+        _UCWrapper.__qualname__ = fn.__qualname__
+        return _UCWrapper
+    return decorator
+```
+
+**Decisao arquitetural**: `OK()` e `FAIL()` eliminam boilerplate de retorno em use cases. `@use_case` encapsula automaticamente TransactionTracker e coleta de healing stats, reduzindo cada UC a uma unica funcao async.
 
 ### 7.4 rpa_self_healing/domain/entities.py
 
@@ -1005,6 +1059,7 @@ from rpa_self_healing.config import settings
 
 class GitService:
     """Auto-commits healed selectors.py files.
+    Framework Self-Healing RPA v3.2
     Graceful degradation when no .git repository is present.
     GIT_AUTO_PUSH is always False by default.
     """
@@ -1182,8 +1237,12 @@ class OllamaProvider(ILLMProvider):
 ```python
 from __future__ import annotations
 
+import importlib
+import inspect
+import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from rpa_self_healing.infrastructure.driver.playwright_driver import PlaywrightDriver
 
@@ -1196,13 +1255,66 @@ def action(name: str | None = None):
     return decorator
 
 
+def _discover_use_cases(bot_pkg_path: Path) -> list[tuple[str, Any]]:
+    """Auto-descobre @use_case decorated functions na pasta use_cases/ do bot."""
+    uc_dir = bot_pkg_path / "use_cases"
+    if not uc_dir.is_dir():
+        return []
+    results: list[tuple[str, Any]] = []
+    for py_file in sorted(uc_dir.glob("*.py")):
+        if py_file.name.startswith("_"):
+            continue
+        mod_name = f"bots.{bot_pkg_path.name}.use_cases.{py_file.stem}"
+        mod = importlib.import_module(mod_name)
+        for _attr_name, obj in inspect.getmembers(mod):
+            if getattr(obj, "_is_use_case", False):
+                results.append((obj._action_name, obj))
+    return results
+
+
+def bot(name: str, description: str = "", url: str = ""):
+    """Class decorator que configura um bot com auto-discovery de @use_case.
+
+    - Define name, description, url na classe
+    - Garante heranca de BaseBot
+    - Auto-descobre @use_case decorated functions em use_cases/
+    - Seta BOT_CLASS no modulo chamador automaticamente
+    """
+    def decorator(cls):
+        cls.name = name
+        cls.description = description
+        cls.url = url
+        if not issubclass(cls, BaseBot):
+            bases = (cls, BaseBot)
+            cls = type(cls.__name__, bases, dict(cls.__dict__))
+
+        # Auto-discover @use_case functions
+        caller_frame = sys._getframe(1)
+        caller_module = caller_frame.f_globals.get("__name__", "")
+        if caller_module:
+            mod = sys.modules.get(caller_module)
+            if mod and mod.__file__:
+                bot_pkg = Path(mod.__file__).parent
+                for action_name, uc_cls in _discover_use_cases(bot_pkg):
+                    async def _make_action(self, _uc=uc_cls, **kwargs):
+                        return await _uc(self._driver).execute(**kwargs)
+                    _make_action._action_name = action_name
+                    setattr(cls, f"_uc_{action_name.replace('-', '_')}", _make_action)
+
+            # Auto-set BOT_CLASS
+            caller_frame.f_globals["BOT_CLASS"] = cls
+
+        return cls
+    return decorator
+
+
 class BaseBot:
     """Classe base para todos os bots do framework.
 
     Subclasses DEVEM:
-        1. Definir atributos de classe: name, description, url
-        2. Decorar actions com @action("nome-da-action")
-        3. Expor BOT_CLASS = MinhaClasse no final do modulo
+        1. Usar @bot("nome", ...) decorator OU definir name, description, url manualmente
+        2. Decorar actions com @action("nome-da-action") OU usar @use_case em use_cases/
+        3. BOT_CLASS e setado automaticamente pelo @bot decorator
     """
 
     name: str = ""
@@ -1264,6 +1376,24 @@ def _discover() -> dict[str, Any]:
 
 def get_registry() -> dict[str, Any]: ...
 def get_bot_class(bot_id: str) -> Any: ...
+```
+
+### 7.20a bots/_template/use_cases/exemplo_uc.py (v3.2 — @use_case style)
+
+```python
+from __future__ import annotations
+from rpa_self_healing.shortcuts import OK, FAIL, use_case
+
+
+@use_case("meu_bot", "exemplo")
+async def exemplo(driver, **kwargs):
+    tracker = kwargs["tracker"]
+    # TODO: implementar logica do use case
+    # Uso:
+    #   await driver.goto("https://example.com")
+    #   await driver.fill("CAMPO", sel.CAMPO, "valor")
+    #   await driver.click("BOTAO", sel.BOTAO)
+    return OK()
 ```
 
 ### 7.21 bots/expandtesting/__init__.py (Bot de Demo)
@@ -1438,10 +1568,67 @@ def _parse_kwargs(args: list[str]) -> dict[str, Any]:
     return kwargs
 
 
+def _scaffold_bot(name: str, url: str = "https://example.com", actions: str = "default") -> None:
+    """Gera estrutura inicial de um novo bot com @bot e @use_case decorators.
+
+    Cria:
+        bots/<name>/__init__.py      — com @bot decorator
+        bots/<name>/selectors.py     — template de seletores
+        bots/<name>/use_cases/*.py   — um arquivo por action com @use_case
+    """
+    from pathlib import Path
+    bot_dir = Path("bots") / name
+    uc_dir = bot_dir / "use_cases"
+    uc_dir.mkdir(parents=True, exist_ok=True)
+
+    action_list = [a.strip() for a in actions.split(",")]
+
+    # __init__.py com @bot
+    init_code = (
+        f'from __future__ import annotations\n'
+        f'from bots.base import BaseBot, bot\n\n\n'
+        f'@bot(name="{name}", description="Bot {name}", url="{url}")\n'
+        f'class {name.title().replace("_", "")}Bot(BaseBot):\n'
+        f'    pass\n'
+    )
+    (bot_dir / "__init__.py").write_text(init_code, encoding="utf-8")
+
+    # selectors.py
+    sel_code = f'# Seletores do Bot: {name}\n# Site: {url}\n\nEXEMPLO: str = "input#exemplo"\n'
+    (bot_dir / "selectors.py").write_text(sel_code, encoding="utf-8")
+
+    # use_cases/__init__.py
+    (uc_dir / "__init__.py").write_text("", encoding="utf-8")
+
+    # Um arquivo por action
+    for act in action_list:
+        uc_code = (
+            f'from __future__ import annotations\n'
+            f'from rpa_self_healing.shortcuts import OK, FAIL, use_case\n\n\n'
+            f'@use_case("{name}", "{act}")\n'
+            f'async def {act}(driver, **kwargs):\n'
+            f'    tracker = kwargs["tracker"]\n'
+            f'    # TODO: implementar {act}\n'
+            f'    return OK()\n'
+        )
+        (uc_dir / f"{act}_uc.py").write_text(uc_code, encoding="utf-8")
+
+    print(f"Bot '{name}' criado em bots/{name}/")
+
+
 def main() -> None:
     args = sys.argv[1:]
     if not args or args[0] in ("-h", "--help"):
-        print("Uso: rpa-cli [--list | --healing-stats | --cache-stats | --cache-clear | <bot> [<action> [--param val ...]]]")
+        print("Uso: rpa-cli [--list | --healing-stats | --cache-stats | --cache-clear | scaffold <name> [--url ...] [--actions ...] | <bot> [<action> [--param val ...]]]")
+        sys.exit(0)
+
+    # Scaffold command
+    if args[0] == "scaffold":
+        if len(args) < 2:
+            print("Uso: rpa-cli scaffold <nome_do_bot> --url https://... --actions login,coleta")
+            sys.exit(1)
+        kwargs = _parse_kwargs(args[2:])
+        _scaffold_bot(args[1], url=kwargs.get("url", "https://example.com"), actions=kwargs.get("actions", "default"))
         sys.exit(0)
 
     # Global flags: --list, --healing-stats, --cache-stats, --cache-clear
@@ -1528,6 +1715,9 @@ uv run rpa-cli expandtesting demo-healing --headless false
 
 # Help de um bot especifico
 uv run rpa-cli expandtesting
+
+# Scaffold de um novo bot (v3.2)
+uv run rpa-cli scaffold meu_bot --url https://example.com --actions login,coleta
 ```
 
 ---
@@ -1540,8 +1730,8 @@ uv sync --extra dev
 uv run playwright install chromium
 cp .env.example .env
 # Preencher OPENROUTER_API_KEY ou ANTHROPIC_API_KEY no .env
-git init && git add . && git commit -m "feat: init self_healing_rpa v3.0"
-uv run pytest tests/ -v                              # 38 testes passando
+git init && git add . && git commit -m "feat: init self_healing_rpa v3.2"
+uv run pytest tests/ -v                              # 66 testes passando
 uv run rpa-cli --list                                # expandtesting + tjms
 uv run rpa-cli expandtesting demo-healing --nivel locator   # Self-Healing ao vivo
 uv run rpa-cli --cache-stats                         # Economia do cache
@@ -1600,6 +1790,10 @@ SCREENSHOT_ON_FAILURE=true
 | `SelectorRepository` usa Regex | Preservar formatacao e comentarios do selectors.py — AST destruiria |
 | Lazy imports dentro de `@action` methods | Evita imports circulares entre bots e infrastructure |
 | `validate` callback no orchestrator | Driver fornece `page.locator(sel).count() > 0` sem orquestrador saber de Playwright |
+| `@bot` class decorator (v3.2) | Auto-discovery de @use_case, auto-set BOT_CLASS, elimina boilerplate |
+| `@use_case` function decorator (v3.2) | UC vira funcao pura — TransactionTracker e healing stats sao automaticos |
+| `OK()` / `FAIL()` shortcuts (v3.2) | Elimina repeticao de `{"status": ActionStatus.SUCESSO, ...}` em todo UC |
+| `scaffold` CLI command (v3.2) | Gera estrutura completa de bot com @bot + @use_case em um comando |
 
 ---
 
@@ -1617,7 +1811,7 @@ uv sync --extra dev
 uv run playwright install chromium
 cp .env.example .env
 # Preencher OPENROUTER_API_KEY ou ANTHROPIC_API_KEY no .env
-git init && git add . && git commit -m "feat: init self_healing_rpa v3.0"
+git init && git add . && git commit -m "feat: init self_healing_rpa v3.2"
 uv run pytest tests/ -v
 uv run rpa-cli --list
 uv run rpa-cli expandtesting demo-healing --nivel locator
