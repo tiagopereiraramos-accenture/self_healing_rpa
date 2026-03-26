@@ -184,3 +184,21 @@ git log --all --follow -- bots/expandtesting/selectors.py
 
 - Sem `.git`: graceful degradation -- healing funciona via cache + log
 - CI/CD: recomendado `GIT_AUTO_COMMIT=false`, healing apenas em cache
+
+## 6. Seguranca (SEC-3)
+
+### Sanitizacao de mensagens de commit (ASA-04)
+
+Dados gerados pelo LLM ou capturados da pagina (seletores, labels) podem conter caracteres de controle ou conteudo enganoso. SEMPRE sanitizar antes de incluir em mensagens de commit:
+
+```python
+import re
+
+def _sanitize_for_commit(text: str, max_len: int = 200) -> str:
+    """Remove caracteres nao imprimiveis e trunca."""
+    cleaned = re.sub(r"[^\x20-\x7E\u00C0-\u024F]", "?", text)
+    return cleaned[:max_len]
+
+# Uso no commit_healed_selector():
+message = f"feat(self-healing): Ajustado seletor para '{_sanitize_for_commit(label)}'"
+```

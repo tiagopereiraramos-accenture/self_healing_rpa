@@ -173,16 +173,31 @@ async def _run_bot_action(bot_id: str, action_name: str, kwargs: dict[str, Any])
     console.print(_json.dumps(result, indent=2, ensure_ascii=False, default=str))
 
 
+import re
+
+_VALID_BOT_NAME = re.compile(r"^[a-z][a-z0-9_]{0,49}$")
+
+
 def _scaffold_bot(bot_name: str, kwargs: dict[str, Any]) -> None:
     """Gera a estrutura completa de um novo bot."""
     from rich.console import Console
 
     console = Console()
+
+    if not _VALID_BOT_NAME.match(bot_name):
+        console.print("[red]Nome invalido. Use apenas letras minusculas, digitos e '_' (max 50 chars).[/]")
+        sys.exit(1)
+
     url = kwargs.get("url", "https://example.com")
     actions_str = kwargs.get("actions", "exemplo")
     action_list = [a.strip() for a in str(actions_str).split(",") if a.strip()]
 
     bots_dir = Path("bots") / bot_name
+    try:
+        bots_dir.resolve().relative_to(Path("bots").resolve())
+    except ValueError:
+        console.print("[red]Nome do bot resulta em path fora do diretorio permitido.[/]")
+        sys.exit(1)
     if bots_dir.exists():
         console.print(f"[red]Pasta bots/{bot_name}/ ja existe.[/]")
         sys.exit(1)

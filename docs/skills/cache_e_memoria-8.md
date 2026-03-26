@@ -182,10 +182,45 @@ Saida de `--cache-stats`:
 ╚══════════════════════════════════════════════╝
 ```
 
-## 7. Regras Inviolaveis
+## 7. Seguranca do Cache (SEC-1, SEC-7, SEC-10)
+
+### SEC-7: Validacao AST obrigatoria antes de usar codigo do cache
+
+Codigo armazenado no cache (flows) pode ter sido adulterado por:
+- Acesso direto ao filesystem
+- Prompt injection que gerou codigo malicioso
+
+**Regra:** Todo codigo lido do cache DEVE passar por `validate_generated_code()` ANTES de execucao.
+Codigo novo do LLM tambem DEVE ser validado ANTES de ser persistido.
+
+```python
+# healing_orchestrator.py (implementacao real)
+cached_code = self._cache.get_flow(label, self._bot_name)
+if cached_code:
+    try:
+        validate_generated_code(cached_code)  # SEC-7: re-validar
+    except UnsafeCodeError:
+        logger.error("[FLOW] Codigo em cache rejeitado pela validacao AST")
+        self._cache.set_flow(label, self._bot_name, "")  # invalidar
+```
+
+### SEC-10: Singleton com lock
+
+O singleton `RepairCache.get_instance()` DEVE usar `threading.Lock()` para evitar race conditions em contexto async/multi-thread.
+
+### Integridade (SEC-7 avancado)
+
+Para ambientes de producao, considerar HMAC no cache:
+- Computar `hmac.new(secret, content, sha256)` ao salvar
+- Verificar com `hmac.compare_digest()` ao carregar
+- Rejeitar cache com assinatura invalida
+
+## 8. Regras Inviolaveis
 
 1. **SEMPRE consultar cache antes de chamar LLM** -- esta e a regra de ouro
 2. **NUNCA instanciar `RepairCache` diretamente em bots** -- o `HealingOrchestrator` gerencia
 3. **Usar `RepairCache.get_instance()`** para obter o singleton
 4. **Usar `RepairCache.reset_instance()`** apenas em testes
 5. **Sem TTL** -- entradas nao expiram automaticamente (seletores curados sao estaveis)
+6. **SEC-1/SEC-7: Codigo de flow DEVE ser validado via AST antes de execucao E antes de persistencia**
+7. **SEC-10: Singleton com `threading.Lock()`**

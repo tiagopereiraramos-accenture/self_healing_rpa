@@ -1,6 +1,6 @@
 # Manual do Desenvolvedor — Self-Healing RPA Framework
 
-**Versao 3.2** | Criado por Tiago Pereira Ramos
+**Versao 3.3** | Criado por Tiago Pereira Ramos
 
 Este manual explica, passo a passo, tudo que voce precisa saber para usar o
 framework. Mesmo que voce nunca tenha trabalhado com RPA, Playwright ou IA,
@@ -149,7 +149,7 @@ uv run rpa-cli expandtesting login --username joao --password 123
 Dentro do codigo, isso chega como:
 
 ```python
-async def execute(self, username="practice", password="SuperSecretPassword!", **kwargs):
+async def execute(self, username="", password="", **kwargs):
     # username = "joao"
     # password = "123"
 ```
@@ -871,8 +871,9 @@ uv run pytest tests/unit/test_pipeline.py::test_pipeline_all_steps_succeed -v
 
 Os testes usam mocks — nao abrem navegador nem chamam IA. Sao rapidos e seguros.
 
-Atualmente: **66 testes unitarios** cobrindo cache, healers, orchestrator,
-pipeline, selector repository, config, LLM router, shortcuts e scaffold.
+Atualmente: **79 testes unitarios** cobrindo cache, healers, orchestrator,
+pipeline, selector repository, config, LLM router, shortcuts, scaffold e
+code validator (validacao AST de codigo LLM).
 
 ---
 

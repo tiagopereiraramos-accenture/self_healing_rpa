@@ -8,6 +8,7 @@ from typing import Any
 from loguru import logger
 
 from rpa_self_healing.config import settings
+from rpa_self_healing.domain.code_validator import UnsafeCodeError, validate_generated_code
 from rpa_self_healing.domain.entities import (
     HealingEvent,
     HealingLevel,
@@ -157,13 +158,19 @@ class HealingOrchestrator:
         # Flow cache check
         cached_code = self._cache.get_flow(label, self._bot_name)
         if cached_code:
-            self._stats.cache_hits += 1
-            self._stats.healing_successes += 1
-            self._stats.total_healing_ms += int((time.monotonic() - t0) * 1000)
-            return HealingResult(
-                success=True, code=cached_code,
-                level=HealingLevel.FLOW, from_cache=True,
-            )
+            try:
+                validate_generated_code(cached_code)
+            except UnsafeCodeError as exc:
+                logger.error(f"[FLOW] Codigo em cache rejeitado pela validacao AST: {exc}")
+                self._cache.set_flow(label, self._bot_name, "")
+            else:
+                self._stats.cache_hits += 1
+                self._stats.healing_successes += 1
+                self._stats.total_healing_ms += int((time.monotonic() - t0) * 1000)
+                return HealingResult(
+                    success=True, code=cached_code,
+                    level=HealingLevel.FLOW, from_cache=True,
+                )
 
         # LLM call
         suggestion = await self._flow.suggest(
@@ -176,6 +183,14 @@ class HealingOrchestrator:
 
         code = suggestion.get("code")
         if code:
+            try:
+                validate_generated_code(code)
+            except UnsafeCodeError as exc:
+                logger.error(
+                    f"[FLOW] Codigo gerado pelo LLM rejeitado pela validacao AST: {exc}"
+                )
+                self._stats.healing_failures += 1
+                return HealingResult(success=False)
             self._cache.set_flow(label, self._bot_name, code)
             self._stats.healing_successes += 1
             duration = int((time.monotonic() - t0) * 1000)

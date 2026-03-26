@@ -182,6 +182,27 @@ Nao e necessario alterar `cli.py`. Basta:
 
 O CLI descobre e roteia automaticamente.
 
+## 12. Seguranca no CLI (SEC-4)
+
+### Path traversal no scaffold (SAST-03)
+
+O `bot_name` recebido via `sys.argv` DEVE ser validado com regex antes de criar diretorios:
+
+```python
+import re
+
+_VALID_BOT_NAME = re.compile(r"^[a-z][a-z0-9_]{0,49}$")
+
+def _scaffold_bot(bot_name: str, kwargs: dict) -> None:
+    if not _VALID_BOT_NAME.match(bot_name):
+        console.print("[red]Nome invalido. Use apenas letras minusculas, digitos e '_' (max 50 chars).[/]")
+        sys.exit(1)
+    bots_dir = Path("bots") / bot_name
+    bots_dir.resolve().relative_to(Path("bots").resolve())  # raises ValueError se fora
+```
+
+**Regra:** NUNCA confiar em input de `sys.argv` para construir paths. SEMPRE validar.
+
 ## 11. Scaffold — Gerador de Bots
 
 O comando `scaffold` gera a estrutura completa de um novo bot no estilo v3.2:

@@ -15,12 +15,14 @@ class Settings:
 
     Instanciada uma unica vez como singleton (``settings``).
     Em testes, crie uma nova instancia apos ``monkeypatch.setenv()``.
+
+    API keys sao expostas como @property com validacao (ASA-02).
     """
 
     def __init__(self) -> None:
-        # LLM Providers
-        self.OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
-        self.ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+        # LLM Providers (private — acessar via @property)
+        self._openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
+        self._anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
         self.OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
         # LLM Strategy
@@ -41,6 +43,12 @@ class Settings:
             "rpa_self_healing/infrastructure/cache/repair_cache.json",
         )
         self.REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        if self.REDIS_URL and not self.REDIS_URL.startswith("rediss://"):
+            import warnings
+            warnings.warn(
+                "REDIS_URL sem TLS (rediss://). Em producao, use rediss:// para conexoes seguras.",
+                stacklevel=2,
+            )
 
         # Playwright
         self.PLAYWRIGHT_HEADLESS: bool = os.getenv("PLAYWRIGHT_HEADLESS", "false").lower() in ("true", "1", "yes")
@@ -52,6 +60,14 @@ class Settings:
         self.LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
         self.LOG_DIR: Path = _ROOT / os.getenv("LOG_DIR", "logs")
         self.SCREENSHOT_ON_FAILURE: bool = os.getenv("SCREENSHOT_ON_FAILURE", "true").lower() in ("true", "1", "yes")
+
+    @property
+    def OPENROUTER_API_KEY(self) -> str:
+        return self._openrouter_api_key
+
+    @property
+    def ANTHROPIC_API_KEY(self) -> str:
+        return self._anthropic_api_key
 
 
 settings = Settings()

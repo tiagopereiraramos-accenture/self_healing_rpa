@@ -12,6 +12,7 @@ from playwright.async_api import (
 )
 
 from rpa_self_healing.config import settings
+from rpa_self_healing.domain.code_validator import UnsafeCodeError, validate_generated_code
 from rpa_self_healing.domain.entities import HealingLevel, HealingStats
 from rpa_self_healing.infrastructure.driver.context_capture import capture_context
 from rpa_self_healing.infrastructure.git.git_service import GitService
@@ -61,7 +62,11 @@ class PlaywrightDriver:
             headless=self._headless,
             slow_mo=settings.PLAYWRIGHT_SLOW_MO,
         )
-        self._context = await self._browser.new_context()
+        self._context = await self._browser.new_context(
+            accept_downloads=False,
+            bypass_csp=False,
+            permissions=[],
+        )
         self._page = await self._context.new_page()
         self._page.set_default_timeout(settings.PLAYWRIGHT_TIMEOUT)
         return self
@@ -74,7 +79,10 @@ class PlaywrightDriver:
 
     @property
     def page(self) -> Page:
-        assert self._page is not None, "Driver nao inicializado. Use 'async with PlaywrightDriver() as driver'."
+        if self._page is None:
+            raise RuntimeError(
+                "Driver nao inicializado. Use 'async with PlaywrightDriver() as driver'."
+            )
         return self._page
 
     # ── API publica (acoes com self-healing) ─────────────────────────────────
@@ -245,10 +253,12 @@ class PlaywrightDriver:
 
     async def _exec_sandboxed(self, code: str, **kwargs: Any) -> Any:
         """Executa codigo gerado pelo LLM em namespace isolado com suporte a await."""
+        validate_generated_code(code)
+        restricted_globals: dict[str, Any] = {"__builtins__": {}}
         local_vars: dict[str, Any] = {"page": self.page, **kwargs}
         lines = "\n".join(f"    {line}" for line in code.strip().splitlines())
         fn_code = f"async def __heal__():\n{lines}"
-        exec(compile(fn_code, "<healing>", "exec"), local_vars)  # noqa: S102
+        exec(compile(fn_code, "<healing>", "exec"), restricted_globals, local_vars)  # noqa: S102
         return await local_vars["__heal__"]()
 
     # ── helpers ──────────────────────────────────────────────────────────────
@@ -261,8 +271,8 @@ class PlaywrightDriver:
 
     def _build_failed_code(self, selector: str, action: str, **kwargs: Any) -> str:
         if action == "fill":
-            return f"await page.fill('{selector}', '{kwargs.get('value', '')}')"
-        return f"await page.{action}('{selector}')"
+            return f"await page.fill({repr(selector)}, {repr(kwargs.get('value', ''))})"
+        return f"await page.{action}({repr(selector)})"
 
     def _persist_healed_selector(self, label: str, old_selector: str, result) -> None:
         """Atualiza selectors.py e commita via Git (se habilitado)."""

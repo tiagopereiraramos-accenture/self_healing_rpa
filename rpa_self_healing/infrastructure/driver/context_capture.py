@@ -23,22 +23,24 @@ async def capture_context(page: "Page", label: str = "") -> dict[str, Any]:
     screenshot_path: Path | None = None
     if settings.SCREENSHOT_ON_FAILURE:
         settings.LOG_DIR.mkdir(parents=True, exist_ok=True)
-        from datetime import datetime
+        from datetime import datetime, timezone
 
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         safe_label = label.replace("/", "_").replace(" ", "_")
         screenshot_path = settings.LOG_DIR / "screenshots" / f"{safe_label}_{ts}.png"
         try:
             await page.screenshot(path=str(screenshot_path), full_page=False)
             logger.debug(f"[DRIVER] Screenshot: {screenshot_path.name}")
-        except Exception:
+        except Exception as exc:
+            logger.debug(f"[CONTEXT] Screenshot falhou: {type(exc).__name__}: {exc}")
             screenshot_path = None
 
     # HTML (truncated)
     try:
         html = await page.content()
         html = html[:_MAX_HTML_BYTES]
-    except Exception:
+    except Exception as exc:
+        logger.debug(f"[CONTEXT] HTML capture falhou: {type(exc).__name__}: {exc}")
         html = ""
 
     # Interactive elements list
@@ -60,7 +62,8 @@ async def capture_context(page: "Page", label: str = "") -> dict[str, Any]:
                 visible: el.offsetParent !== null,
             }));
         }""")
-    except Exception:
+    except Exception as exc:
+        logger.debug(f"[CONTEXT] Elements capture falhou: {type(exc).__name__}: {exc}")
         elements = []
 
     # Accessibility tree snapshot (text)
@@ -71,7 +74,8 @@ async def capture_context(page: "Page", label: str = "") -> dict[str, Any]:
             import json
 
             a11y_tree = json.dumps(snapshot, ensure_ascii=False)[:3000]
-    except Exception:
+    except Exception as exc:
+        logger.debug(f"[CONTEXT] A11y tree falhou: {type(exc).__name__}: {exc}")
         a11y_tree = ""
 
     return {

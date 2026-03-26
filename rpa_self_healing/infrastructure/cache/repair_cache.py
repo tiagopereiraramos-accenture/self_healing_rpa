@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +26,7 @@ class RepairCache(IRepairCache):
     """
 
     _instance: RepairCache | None = None
+    _lock: threading.Lock = threading.Lock()
 
     def __init__(self, cache_file: Path | None = None) -> None:
         self._file = cache_file or settings.CACHE_FILE
@@ -32,15 +34,17 @@ class RepairCache(IRepairCache):
 
     @classmethod
     def get_instance(cls) -> RepairCache:
-        """Retorna a instancia singleton do cache."""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
+        """Retorna a instancia singleton do cache (thread-safe)."""
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = cls()
+            return cls._instance
 
     @classmethod
     def reset_instance(cls) -> None:
         """Limpa o singleton (para uso em testes)."""
-        cls._instance = None
+        with cls._lock:
+            cls._instance = None
 
     # ── persistencia ─────────────────────────────────────────────────────────
 
@@ -48,8 +52,8 @@ class RepairCache(IRepairCache):
         if self._file.exists():
             try:
                 return json.loads(self._file.read_text(encoding="utf-8"))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(f"[CACHE] Falha ao carregar cache: {type(exc).__name__}: {exc}")
         return {"locators": {}, "flows": {}}
 
     def _save(self) -> None:

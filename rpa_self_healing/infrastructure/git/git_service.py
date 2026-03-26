@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from loguru import logger
 
 from rpa_self_healing.config import settings
+
+_UNSAFE_COMMIT_CHARS = re.compile(r"[^\w\s\-_.:/()=+@#,;'\"\[\]{}|~`!?&*^%$<>\\]", re.UNICODE)
 
 
 class GitService:
@@ -44,16 +47,20 @@ class GitService:
         if self._repo is None:
             return False
 
+        safe_label = _UNSAFE_COMMIT_CHARS.sub("", str(label))[:80]
+        safe_old = _UNSAFE_COMMIT_CHARS.sub("", str(old_selector))[:120]
+        safe_new = _UNSAFE_COMMIT_CHARS.sub("", str(new_selector))[:120]
+        safe_bot = _UNSAFE_COMMIT_CHARS.sub("", str(bot_name))[:50]
         message = (
-            f"feat(self-healing): Ajustado seletor para '{label}'\n\n"
-            f"Bot: {bot_name}\n"
-            f"Seletor anterior: {old_selector}\n"
-            f"Novo seletor:     {new_selector}\n"
+            f"feat(self-healing): Ajustado seletor para '{safe_label}'\n\n"
+            f"Bot: {safe_bot}\n"
+            f"Seletor anterior: {safe_old}\n"
+            f"Novo seletor:     {safe_new}\n"
             f"Nível de healing: {healing_level} (Nível {'1' if healing_level == 'LOCATOR' else '2'})\n"
             f"LLM utilizado:    {llm_model}\n"
             f"Tokens usados:    {tokens_in} input + {tokens_out} output\n"
             f"Confiança:        {confidence:.2f}\n\n"
-            f"Correção automática — Framework Self-Healing RPA v3.2"
+            f"Correção automática — Framework Self-Healing RPA v3.3"
         )
         try:
             self._repo.index.add([str(selectors_file.resolve())])

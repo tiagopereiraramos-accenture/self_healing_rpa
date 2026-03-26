@@ -138,14 +138,14 @@ Regras criticas:
 ```python
 from __future__ import annotations
 
+import os
+
 import bots.expandtesting.selectors as sel
 from rpa_self_healing.domain.entities import ActionStatus
 from rpa_self_healing.infrastructure.driver.playwright_driver import PlaywrightDriver
 from rpa_self_healing.infrastructure.logging.rpa_logger import TransactionTracker
 
 LOGIN_URL = "https://practice.expandtesting.com/login"
-VALID_USERNAME = "practice"
-VALID_PASSWORD = "SuperSecretPassword!"
 
 
 class LoginUC:
@@ -154,10 +154,19 @@ class LoginUC:
 
     async def execute(
         self,
-        username: str = VALID_USERNAME,
-        password: str = VALID_PASSWORD,
+        username: str = "",
+        password: str = "",
         **kwargs,
     ) -> dict:
+        # SEC-2: credenciais NUNCA hardcoded — vem do env ou argumento
+        username = username or os.getenv("BOT_USERNAME", "")
+        password = password or os.getenv("BOT_PASSWORD", "")
+        if not username or not password:
+            raise EnvironmentError(
+                "Credenciais nao configuradas. Defina BOT_USERNAME e BOT_PASSWORD "
+                "no ambiente ou passe como argumento."
+            )
+
         with TransactionTracker(
             bot_name="expandtesting",
             action="login",
@@ -183,6 +192,7 @@ class LoginUC:
 Pontos obrigatorios no use case:
 - Construtor recebe `PlaywrightDriver`
 - `execute()` aceita `**kwargs` e usa `TransactionTracker` como context manager
+- **SEC-2: Credenciais NUNCA hardcoded** — usar `os.getenv()` com fallback vazio e `EnvironmentError` se ausente
 - Interacoes com a pagina usam `self._driver.fill("LABEL", sel.SELECTOR, valor)`
 - `tracker.add_healing_stats(self._driver.get_healing_stats())` antes do retorno
 - Erros de negocio usam `tracker.fail("msg")` (NAO levantam excecao)
@@ -288,3 +298,5 @@ return FAIL("credenciais invalidas")
 5. **`tracker.fail(msg)` para erros logicos**, nao excecoes
 6. **`tracker.add_healing_stats()`** deve ser chamado antes do retorno bem-sucedido
 7. **Para novos bots, prefira `@use_case` + `@bot` (v3.2) em vez de classes**
+8. **SEC-2: PROIBIDO hardcodar credenciais** -- usar `os.getenv()` + `EnvironmentError`
+9. **SEC-4: Validar input do CLI** -- `bot_name` deve ser `[a-z][a-z0-9_]{0,49}`, paths verificados com `relative_to()`

@@ -1,6 +1,6 @@
 # Super Prompt: Self-Healing RPA — Framework Multi-RPA Self-Healing com Playwright e IA
 
-**Versao 3.2 — Atualizado em 24 de Marco de 2026**
+**Versao 3.3 — Atualizado em 25 de Marco de 2026**
 Criado por Tiago Pereira Ramos — Baseado em pesquisa aplicada de Self-Healing Automation 2025/2026
 
 ---
@@ -55,7 +55,8 @@ docs/skills/
 ├── rpa_development-6.md        # Como criar bots, BaseBot, use cases
 ├── llm_providers-7.md          # LLMRouter, providers, prompts
 ├── cache_e_memoria-8.md        # RepairCache, regra de ouro, singleton
-└── observabilidade-9.md        # HealingStats, metricas, relatorios
+├── observabilidade-9.md        # HealingStats, metricas, relatorios
+└── pipeline-10.md              # Pipeline declarativo para orquestracao
 ```
 
 ---
@@ -241,25 +242,25 @@ build-backend = "hatchling.build"
 
 [project]
 name = "self-healing-rpa"
-version = "3.2.0"
+version = "3.3.0"
 description = "Framework Multi-RPA Self-Healing com Playwright e IA"
 requires-python = ">=3.11"
 dependencies = [
-    "playwright>=1.44.0",
-    "openai>=1.30.0",
-    "anthropic>=0.25.0",
-    "gitpython>=3.1.43",
-    "loguru>=0.7.2",
-    "python-dotenv>=1.0.1",
-    "rich>=13.7.1",
+    "playwright~=1.44",
+    "openai~=1.30",
+    "anthropic~=0.25",
+    "gitpython~=3.1",
+    "loguru~=0.7",
+    "python-dotenv~=1.0",
+    "rich~=13.7",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.2.0",
-    "pytest-asyncio>=0.23.7",
-    "pytest-mock>=3.14.0",
-    "ruff>=0.4.0",
+    "pytest~=8.2",
+    "pytest-asyncio~=0.23",
+    "pytest-mock~=3.14",
+    "ruff~=0.4",
 ]
 
 [project.scripts]
@@ -340,8 +341,8 @@ class Settings:
 
     def __init__(self) -> None:
         # LLM Providers
-        self.OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
-        self.ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+        self._openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
+        self._anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
         self.OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
         # LLM Strategy
@@ -877,7 +878,8 @@ class PlaywrightDriver:
 
     @property
     def page(self) -> Page:
-        assert self._page is not None, "Driver nao inicializado."
+        if self._page is None:
+            raise RuntimeError("Driver nao inicializado.")
         return self._page
 
     # API publica
@@ -891,12 +893,14 @@ class PlaywrightDriver:
     async def heal_proactive(self, broken: list[tuple[str, str]]) -> None: ...
     def get_healing_stats(self) -> dict[str, Any]: ...
 
-    # _exec_sandboxed: wraps LLM code in async def __heal__() for await support
+    # _exec_sandboxed: validates LLM code via AST then executes in restricted namespace
     async def _exec_sandboxed(self, code: str, **kwargs: Any) -> Any:
+        validate_generated_code(code)  # SEC-1: AST validation
+        restricted_globals: dict[str, Any] = {"__builtins__": {}}
         local_vars: dict[str, Any] = {"page": self.page, **kwargs}
         lines = "\n".join(f"    {line}" for line in code.strip().splitlines())
         fn_code = f"async def __heal__():\n{lines}"
-        exec(compile(fn_code, "<healing>", "exec"), local_vars)
+        exec(compile(fn_code, "<healing>", "exec"), restricted_globals, local_vars)
         return await local_vars["__heal__"]()
 
     def _get_orchestrator(self):
@@ -1468,15 +1472,15 @@ from rpa_self_healing.infrastructure.driver.playwright_driver import PlaywrightD
 from rpa_self_healing.infrastructure.logging.rpa_logger import TransactionTracker
 
 LOGIN_URL = "https://practice.expandtesting.com/login"
-VALID_USERNAME = "practice"
-VALID_PASSWORD = "SuperSecretPassword!"
-
-
 class LoginUC:
     def __init__(self, driver: PlaywrightDriver) -> None:
         self._driver = driver
 
-    async def execute(self, username=VALID_USERNAME, password=VALID_PASSWORD, **kwargs) -> dict:
+    async def execute(self, username="", password="", **kwargs) -> dict:
+        username = username or os.getenv("BOT_USERNAME", "")
+        password = password or os.getenv("BOT_PASSWORD", "")
+        if not username or not password:
+            raise EnvironmentError("Credenciais nao configuradas.")
         with TransactionTracker(bot_name="expandtesting", action="login", item_id=username) as tracker:
             await self._driver.goto(LOGIN_URL)
             await self._driver.fill("CAMPO_USERNAME", sel.CAMPO_USERNAME, username)
@@ -1730,8 +1734,8 @@ uv sync --extra dev
 uv run playwright install chromium
 cp .env.example .env
 # Preencher OPENROUTER_API_KEY ou ANTHROPIC_API_KEY no .env
-git init && git add . && git commit -m "feat: init self_healing_rpa v3.2"
-uv run pytest tests/ -v                              # 66 testes passando
+git init && git add . && git commit -m "feat: init self_healing_rpa v3.3"
+uv run pytest tests/ -v                              # 79 testes passando
 uv run rpa-cli --list                                # expandtesting + tjms
 uv run rpa-cli expandtesting demo-healing --nivel locator   # Self-Healing ao vivo
 uv run rpa-cli --cache-stats                         # Economia do cache
@@ -1811,7 +1815,7 @@ uv sync --extra dev
 uv run playwright install chromium
 cp .env.example .env
 # Preencher OPENROUTER_API_KEY ou ANTHROPIC_API_KEY no .env
-git init && git add . && git commit -m "feat: init self_healing_rpa v3.2"
+git init && git add . && git commit -m "feat: init self_healing_rpa v3.3"
 uv run pytest tests/ -v
 uv run rpa-cli --list
 uv run rpa-cli expandtesting demo-healing --nivel locator

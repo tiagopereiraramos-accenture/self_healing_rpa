@@ -81,8 +81,17 @@ class TransactionTracker:
 
     # ── context manager ──────────────────────────────────────────────────────
 
+    @staticmethod
+    def _mask_pii(value: str) -> str:
+        """Mascara PII usando hash parcial (SEC-9)."""
+        if not value:
+            return ""
+        import hashlib
+        return hashlib.sha256(value.encode()).hexdigest()[:8]
+
     def __enter__(self) -> TransactionTracker:
-        logger.info(f"[DRIVER] {self._bot_name}.{self._action} | item={self._item_id}")
+        masked = self._mask_pii(self._item_id)
+        logger.info(f"[DRIVER] {self._bot_name}.{self._action} | item={masked}")
         return self
 
     def __exit__(self, exc_type: type | None, exc_val: Exception | None, _tb: Any) -> bool:

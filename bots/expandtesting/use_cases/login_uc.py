@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+import os
+
 import bots.expandtesting.selectors as sel
 from rpa_self_healing.domain.entities import ActionStatus
 from rpa_self_healing.infrastructure.driver.playwright_driver import PlaywrightDriver
 from rpa_self_healing.infrastructure.logging.rpa_logger import TransactionTracker
 
 LOGIN_URL = "https://practice.expandtesting.com/login"
-VALID_USERNAME = "practice"
-VALID_PASSWORD = "SuperSecretPassword!"
 
 
 class LoginUC:
@@ -18,10 +18,17 @@ class LoginUC:
 
     async def execute(
         self,
-        username: str = VALID_USERNAME,
-        password: str = VALID_PASSWORD,
+        username: str = "",
+        password: str = "",
         **kwargs,
     ) -> dict:
+        username = username or os.getenv("BOT_USERNAME", "")
+        password = password or os.getenv("BOT_PASSWORD", "")
+        if not username or not password:
+            raise EnvironmentError(
+                "Credenciais nao configuradas. Defina BOT_USERNAME e BOT_PASSWORD "
+                "no ambiente ou passe como argumento."
+            )
         with TransactionTracker(
             bot_name="expandtesting",
             action="login",

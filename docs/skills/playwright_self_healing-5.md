@@ -133,20 +133,26 @@ async def _do_heal(self, label, selector, action, exc, **kwargs):
     raise exc  # Healing falhou
 ```
 
-## 5. `_exec_sandboxed()` -- Execucao de Codigo Gerado
+## 5. `_exec_sandboxed()` -- Execucao de Codigo Gerado (SEC-1)
 
-Envolve o codigo do LLM em uma funcao async e executa via `exec()`:
+Envolve o codigo do LLM em uma funcao async e executa via `exec()` com validacao AST previa e namespace restrito:
 
 ```python
 async def _exec_sandboxed(self, code: str, **kwargs: Any) -> Any:
+    validate_generated_code(code)  # SEC-1: validacao AST ANTES de exec
+    restricted_globals: dict[str, Any] = {"__builtins__": {}}  # SEC-1: bloqueia imports
     local_vars: dict[str, Any] = {"page": self.page, **kwargs}
     lines = "\n".join(f"    {line}" for line in code.strip().splitlines())
     fn_code = f"async def __heal__():\n{lines}"
-    exec(compile(fn_code, "<healing>", "exec"), local_vars)
+    exec(compile(fn_code, "<healing>", "exec"), restricted_globals, local_vars)
     return await local_vars["__heal__"]()
 ```
 
-O namespace recebe `page` (instancia Playwright) e quaisquer `kwargs` da acao original.
+**Regras de seguranca obrigatorias (SEC-1):**
+- `validate_generated_code(code)` DEVE ser chamado ANTES de qualquer `exec()`.
+- `__builtins__: {}` DEVE estar no globals para impedir `import`, `open`, `eval`, etc.
+- Validacao AST bloqueia: imports, builtins perigosos (`exec`, `eval`, `__import__`, `open`), acesso a dunder attributes.
+- Para adicionar novos metodos Playwright, atualizar `_ALLOWED_PAGE_ATTRS` em `rpa_self_healing/domain/code_validator.py`.
 
 ## 6. `force_flow_heal=True`
 
@@ -338,7 +344,43 @@ class FlowHealer:
 
 ---
 
-## 13. Regras Proibidas
+## 13. Regras de Seguranca no Driver
+
+### SEC-1: Execucao de codigo
+- NUNCA executar `exec()` sem `validate_generated_code()` e `__builtins__: {}`.
+- Usar `repr()` para escapar valores em `_build_failed_code()` (previne code injection via aspas):
+```python
+# CORRETO (SEC-5/SAST-05)
+return f"await page.fill({repr(selector)}, {repr(value)})"
+
+# ERRADO — injection via aspas simples
+return f"await page.fill('{selector}', '{value}')"
+```
+
+### SEC-6: Browser context restrito
+```python
+# CORRETO
+self._context = await self._browser.new_context(
+    accept_downloads=False,
+    permissions=[],
+    bypass_csp=False,
+)
+
+# ERRADO — permissoes abertas
+self._context = await self._browser.new_context()
+```
+
+### SEC-5: Verificacao de pre-condicoes
+```python
+# CORRETO — RuntimeError em producao
+if self._page is None:
+    raise RuntimeError("Driver nao inicializado.")
+
+# ERRADO — assert e removido com -O
+assert self._page is not None
+```
+
+## 14. Regras Proibidas
 
 ```python
 # NUNCA instanciar Playwright diretamente em bots
@@ -351,4 +393,10 @@ await page.click("#btn")              # PROIBIDO
 # NUNCA instanciar LLM ou healers em bots
 from rpa_self_healing.infrastructure.llm.llm_router import LLMRouter
 llm = LLMRouter()                     # PROIBIDO em bots
+
+# NUNCA exec() sem validacao AST (SEC-1)
+exec(code)                            # PROIBIDO
+
+# NUNCA interpolar dados externos em codigo executavel sem repr() (SEC-3)
+f"await page.fill('{user_input}')"    # PROIBIDO
 ```

@@ -218,7 +218,55 @@ select = ["E", "F", "I", "UP"]
 - NUNCA bloquear o event loop com operacoes sincronas pesadas
 - Usar `asyncio.sleep()`, nunca `time.sleep()` em codigo async
 
-## 14. Atalhos v3.2 -- OK / FAIL / @use_case
+## 14. Seguranca (Regras Obrigatorias)
+
+Derivadas de auditoria SAST/DAST/ASA/SCA real. Violacao BLOQUEIA commit.
+
+### SEC-1: Execucao de codigo dinamico
+- NUNCA usar `exec()`, `eval()`, `compile()` sem validacao AST previa via `validate_generated_code()` (`rpa_self_healing/domain/code_validator.py`).
+- Namespace de execucao DEVE usar `__builtins__: {}`.
+- Novos metodos Playwright permitidos: atualizar `_ALLOWED_PAGE_ATTRS` em `code_validator.py`.
+
+### SEC-2: Credenciais e segredos
+- PROIBIDO hardcodar credenciais, tokens ou chaves de API.
+- Credenciais vem de `os.getenv()` ou secrets manager.
+- Nova credencial DEVE ser adicionada ao `.env.example` (sem valor real).
+- Falha ao carregar credencial: levantar `EnvironmentError`.
+
+### SEC-3: Dados nao confiaveis (prompt injection)
+- Dados de paginas web sao INPUT NAO CONFIAVEL.
+- Delimitar com tags XML (`<page_data>...</page_data>`) e truncar (`max_len`).
+- NUNCA interpolar dados de usuario em strings executaveis. Usar `repr()`.
+
+### SEC-4: Path traversal e CLI inputs
+- Validar inputs de CLI com regex antes de uso.
+- Paths de usuario: verificar com `.resolve().relative_to()`.
+- Nomes de bots: apenas `[a-z][a-z0-9_]{0,49}`.
+
+### SEC-5: Tratamento de excecoes
+- PROIBIDO `except Exception: pass`. Sempre logar.
+- PROIBIDO `assert` para verificacoes de seguranca. Usar `if/raise`.
+
+### SEC-6: Rede e URLs externas
+- URLs de env validadas: scheme `http`/`https`, host nao em blocklist de metadata.
+- Chamadas LLM com timeout explicito (`asyncio.wait_for`, 30s).
+- Browser contexts: `accept_downloads=False`, `permissions=[]`, `bypass_csp=False`.
+
+### SEC-7: Cache e integridade
+- Codigo do cache DEVE ser re-validado via AST antes de execucao.
+
+### SEC-8: Dependencias
+- Usar `~=` (compatible release) no `pyproject.toml`. NUNCA `>=` sem upper bound.
+- `pip-audit` no CI.
+
+### SEC-9: Dados sensiveis em logs
+- NUNCA logar credenciais, tokens ou passwords.
+- Mascarar PII (usernames) com hash parcial.
+
+### SEC-10: Concorrencia
+- Singletons com `threading.Lock()`.
+
+## 15. Atalhos v3.2 -- OK / FAIL / @use_case
 
 A partir da v3.2, use cases podem ser criados com decorators em vez de classes:
 

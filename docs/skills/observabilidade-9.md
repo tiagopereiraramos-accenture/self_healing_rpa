@@ -186,7 +186,51 @@ class ActionStatus(StrEnum):
     ERRO_TECNICO = "erro_tecnico"
 ```
 
-## 9. Regras Inviolaveis
+## 9. Seguranca em Logs (SEC-5, SEC-9)
+
+### SEC-9: Dados sensiveis em logs
+
+- NUNCA logar credenciais, tokens, chaves de API ou passwords.
+- Mascarar identificadores de usuario (PII) com hash parcial antes de logar:
+
+```python
+import hashlib
+
+def _mask_id(value: str) -> str:
+    if not value:
+        return ""
+    h = hashlib.sha256(value.encode()).hexdigest()[:8]
+    return f"****{h}"
+
+# Uso:
+logger.info(f"[DRIVER] {bot_name}.{action} | item={_mask_id(item_id)}")
+```
+
+- `item_id` em `TransactionTracker` frequentemente e o username — considerar mascaramento.
+
+### SEC-5: Excecoes silenciadas
+
+- PROIBIDO `except Exception: pass` — SEMPRE logar com contexto:
+
+```python
+# CORRETO
+except Exception as exc:
+    logger.debug(f"[CACHE] Falha ao carregar: {type(exc).__name__}: {exc}")
+
+# ERRADO
+except Exception:
+    pass
+```
+
+- PROIBIDO usar `assert` para verificacoes de runtime. Usar `if/raise`.
+
+### Integridade de logs (SEC-9 avancado)
+
+Para ambientes regulados:
+- Encaminhar logs para SIEM imutavel (CloudWatch, Splunk, Elastic).
+- Considerar hash encadeado em logs JSONL para detectar adulteracao.
+
+## 10. Regras Inviolaveis
 
 1. **Todo use case DEVE usar `TransactionTracker`** como context manager
 2. **`tracker.add_healing_stats()`** DEVE ser chamado antes do retorno bem-sucedido
@@ -194,3 +238,5 @@ class ActionStatus(StrEnum):
 4. **Erros de negocio usam `tracker.fail(msg)`**, nao excecoes
 5. **Screenshots** sao salvos em `logs/screenshots/{label}_{timestamp}.png`
 6. **Logs JSONL** sao append-only -- nunca sobrescrever
+7. **SEC-9: NUNCA logar credenciais ou PII sem mascaramento**
+8. **SEC-5: NUNCA silenciar excecoes com `except: pass`**

@@ -12,7 +12,8 @@ Framework Python para Automacao de Processos Roboticos (RPA) com self-healing em
 - **Multi-provider LLM**: OpenRouter -> Anthropic -> Ollama (fallback offline)
 - **Clean Architecture**: Domain / Application / Infrastructure / Bots
 - **Observabilidade**: Metricas de custo, tokens, taxa de sucesso, cache hits
-- **Zero Boilerplate (v3.2)**: `@use_case`, `OK()`, `FAIL()`, `@bot`, `scaffold`
+- **Zero Boilerplate**: `@use_case`, `OK()`, `FAIL()`, `@bot`, `scaffold`
+- **Security Hardening (v3.3)**: AST validation, SSRF blocklist, PII masking, exec sandbox
 
 ## Quick Start
 
@@ -37,7 +38,7 @@ uv run rpa-cli --list
 uv run rpa-cli expandtesting demo-healing --nivel locator
 ```
 
-## Criar um Bot em 30 segundos (v3.2)
+## Criar um Bot em 30 segundos (v3.3)
 
 ```bash
 # Gerar estrutura completa
@@ -72,7 +73,7 @@ async def login(driver, username="", password="", **kwargs):
 
 Sem classes, sem TransactionTracker, sem imports de ActionStatus. O framework cuida de tudo.
 
-## v3.2 vs v3.1 — Comparacao
+## v3.3 vs v3.1 — Comparacao
 
 ### Antes (v3.1) — 20 linhas
 ```python
@@ -93,7 +94,7 @@ class LoginUC:
             return {"status": ActionStatus.SUCESSO, "url": self._driver.page.url}
 ```
 
-### Depois (v3.2) — 8 linhas
+### Depois (v3.3) — 8 linhas
 ```python
 from rpa_self_healing import use_case, OK
 import bots.meu_bot.selectors as sel
@@ -130,7 +131,7 @@ self_healing_rpa/
 ├── cli.py                      # Entry point (rpa-cli) + scaffold
 ├── rpa_self_healing/           # Motor central
 │   ├── config.py               # Settings (.env)
-│   ├── shortcuts.py            # OK(), FAIL(), @use_case (v3.2)
+│   ├── shortcuts.py            # OK(), FAIL(), @use_case (v3.3)
 │   ├── domain/                 # Entidades + interfaces (zero deps)
 │   ├── application/            # LocatorHealer, FlowHealer, HealingOrchestrator, Pipeline
 │   └── infrastructure/         # Driver, LLM, Cache, Git, Logging
@@ -138,7 +139,7 @@ self_healing_rpa/
 │   ├── base.py                 # BaseBot + @action + @bot decorator
 │   ├── registry.py             # Auto-discovery
 │   └── expandtesting/          # Bot de demo
-├── tests/                      # 66 testes unitarios
+├── tests/                      # 79 testes unitarios
 └── docs/                       # Manual + Skills + super prompt
 ```
 
@@ -157,7 +158,7 @@ result = await Pipeline(driver, bot_name="meu_bot") \
     .run(username="user")
 ```
 
-Funciona com `@use_case` (v3.2) e com classes (v3.1).
+Funciona com `@use_case` (v3.3) e com classes (v3.1).
 
 ```bash
 # Demo do pipeline
@@ -175,7 +176,7 @@ uv run rpa-cli expandtesting demo-healing --nivel locator
 uv run rpa-cli expandtesting demo-healing --nivel flow
 uv run rpa-cli expandtesting demo-healing --nivel ambos
 
-# Scaffold (v3.2)
+# Scaffold (v3.3)
 uv run rpa-cli scaffold meu_bot --url https://sistema.com --actions login,coleta
 
 # Observabilidade
@@ -187,7 +188,7 @@ uv run rpa-cli --cache-clear
 uv run rpa-cli expandtesting demo-healing --headless false
 ```
 
-## Helpers Rapidos (v3.2)
+## Helpers Rapidos (v3.3)
 
 ```python
 from rpa_self_healing import OK, FAIL, use_case
@@ -237,4 +238,4 @@ PLAYWRIGHT_TIMEOUT=10000
 
 ## Licenca
 
-Criado por Tiago Pereira Ramos — Self-Healing RPA v3.2
+Criado por Tiago Pereira Ramos — Self-Healing RPA v3.3
